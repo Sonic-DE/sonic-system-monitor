@@ -5,7 +5,7 @@ project(systemmonitor)
 set(PROJECT_VERSION "6.7.5")
 
 set(PROJECT_DEP_VERSION "6.7.0")
-set(QT_MIN_VERSION "6.10.0")
+set(QT_MIN_VERSION "6.11.0")
 set(KF6_MIN_VERSION "6.30.0")
 set(KDE_COMPILERSETTINGS_LEVEL "5.82")
 
@@ -48,6 +48,10 @@ find_package(KF6Kirigami  ${KF6_MIN_VERSION})
 set_package_properties(KF6Kirigami PROPERTIES
     TYPE RUNTIME
 )
+find_package(KF6QuickCharts ${KF6_MIN_VERSION})
+set_package_properties(KF6QuickCharts PROPERTIES
+    TYPE RUNTIME
+)
 find_package(KF${QT_MAJOR_VERSION}KirigamiAddons 1.1.0 REQUIRED)
 set_package_properties(KF${QT_MAJOR_VERSION}KirigamiAddons PROPERTIES
     TYPE REQUIRED
@@ -61,7 +65,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 set(CMAKE_CXX_STANDARD_REQUIRED TRUE)
 ecm_set_disabled_deprecation_versions(QT 6.11.0
-    KF 6.23.0
+    KF 6.27.0
 )
 
 if("${CMAKE_BUILD_TYPE}" STREQUAL "Debug")
