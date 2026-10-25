@@ -1,5 +1,6 @@
 /*
  * SPDX-FileCopyrightText: 2020 David Redondo <kde@david-redondo.de>
+ * SPDX-FileCopyrightText: 2026 SonicDE contributors
  *
  * SPDX-License-Identifier: LGPL-2.1-only OR LGPL-3.0-only OR LicenseRef-KDE-Accepted-LGPL
  */
@@ -17,7 +18,8 @@
 #include <QDBusConnectionInterface>
 #include <QDBusServiceWatcher>
 
-static const QString plasmashellService = QStringLiteral("org.kde.plasmashell");
+static const bool sonicSession = qgetenv("XDG_CURRENT_DESKTOP").split(':').contains(QByteArrayLiteral("SonicDE"));
+static const QString plasmashellService = sonicSession ? QStringLiteral("org.sonicde.sonicshell") : QStringLiteral("org.kde.plasmashell");
 
 WidgetExporter::WidgetExporter(QObject *parent)
     : QObject(parent)
@@ -49,9 +51,9 @@ void WidgetExporter::exportAsWidget(FaceLoader *loader) const
     script += QStringLiteral("w.reloadConfig\n");
 
     auto call = QDBusMessage::createMethodCall(plasmashellService,
-                                               QStringLiteral("/PlasmaShell"),
-                                               QStringLiteral("org.kde.PlasmaShell"),
-                                               QStringLiteral("evaluateScript"));
+        sonicSession ? QStringLiteral("/SonicShell") : QStringLiteral("/PlasmaShell"),
+        sonicSession ? QStringLiteral("org.sonicde.SonicShell") : QStringLiteral("org.kde.PlasmaShell"),
+        QStringLiteral("evaluateScript"));
     call.setArguments({script});
     QDBusConnection::sessionBus().asyncCall(call);
 }
