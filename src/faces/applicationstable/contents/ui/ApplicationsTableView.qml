@@ -7,6 +7,8 @@
 pragma ComponentBehavior: Bound
 
 import QtQuick
+import QtQml
+import QtQml.Models
 import QtQuick.Controls
 
 import Qt.labs.qmlmodels
@@ -27,7 +29,7 @@ Table.BaseTableView {
         anchors.fill: parent
         anchors.margins: Kirigami.Units.largeSpacing
         icon.name: "action-unavailable-symbolic"
-        text: i18nc("Warning message shown on runtime error", "Applications view is unsupported on your system");
+        text: appModel.statusMessage
     }
 
     property var enabledColumns: []
@@ -51,12 +53,20 @@ Table.BaseTableView {
             // selection.model refers to the latter one, so the indexes may need additional mapping.
             var index = selection.model == sortColumnFilter ? i : selection.model.mapToSource(i)
             index = sortColumnFilter.mapToSource(index)
+            index = displayModel.mapToSource(cacheModel.mapToSource(index))
 
             var item = applicationInformation.createObject()
-            item.index = index
+            item.applicationId = appModel.data(index, Process.ApplicationProcessModel.ApplicationId)
             result.push(item)
         }
         return result
+    }
+
+    readonly property var selectedApplicationIds: selectedApplications.map(info => info.applicationId)
+
+    Table.ApplicationIdentityProvider {
+        model: appModel
+        enabled: view.visible
     }
 
     property Component applicationInformation: ApplicationInformation {
@@ -147,7 +157,7 @@ Table.BaseTableView {
         idRole: "Attribute"
     }
 
-    Process.ApplicationDataModel {
+    Process.ApplicationProcessModel {
         id: appModel
 
         property int nameColumn: enabledAttributes.indexOf("appName")
@@ -167,29 +177,6 @@ Table.BaseTableView {
         property var hiddenAttributes: []
 
         enabled: view.visible
-
-        cgroupMapping: {
-            // We want all processes that are part of the session and background
-            // cgroups to be listed as part of a "Background Services" entry.
-            "session.slice": "services",
-            "background.slice": "services",
-
-            // These all show up as part of the app CGroup but are really
-            // background services, so move them there.
-            "org.a11y.atspi.Registry": "services",
-            "org.kde.discover.notifier": "services",
-            "geoclue": "services",
-            "org.kde.kunifiedpush": "services",
-            "dconf.service": "services",
-            "flatpak-session-helper.service": "services",
-            "gpg-agent.service": "services",
-            "org.kde.xwaylandvideobridge": "services",
-            "org.kde.kalendarac": "services",
-            "xdg-desktop-portal-gtk.service": "services",
-            "org.kde.kdeconnect": "services",
-            "org.kde.kwalletd6": "services",
-            "org.kde.kclockd": "services"
-        }
 
         applicationOverrides: {
             "services": {
@@ -219,9 +206,13 @@ Table.BaseTableView {
             return result;
         }
 
-        Component.onCompleted: {
+        // Availability is only known after the first inventory scan, so report
+        // it when the model's status changes rather than at construction.
+        onStatusChanged: {
             if (!available) {
-                console.error("Implementation matching https://systemd.io/DESKTOP_ENVIRONMENTS/ was not found. ApplicationsView will not be available")
+                console.error("ApplicationsView is not available:", statusMessage)
+            } else if (statusMessage.length > 0) {
+                console.warn("ApplicationsView:", statusMessage)
             }
         }
     }

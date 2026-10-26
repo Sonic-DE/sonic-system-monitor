@@ -5,13 +5,15 @@
  */
 
 import QtQml
+import org.kde.ksysguard.process as Process
 
 QtObject {
     id: info
 
     property var model
-    property var index
-    onIndexChanged: info.update()
+    property string applicationId
+    property bool actionEligible: false
+    onApplicationIdChanged: info.update()
 
     property var sensorColumns
     property int role
@@ -31,28 +33,46 @@ QtObject {
     property string iconName
 
     property var pids: []
+    property var actionPids: []
 
     property var connection: Connections {
         target: model
         function onDataChanged() { if (info) { info.update() } }
+        function onApplicationsChanged() { if (info) { info.update() } }
+        function onEnabledAttributesChanged() { if (info) { info.update() } }
     }
 
     function update() {
-        if ( model == null || index == null) {
+        if (model == null || applicationId.length === 0) {
             return
         }
 
-        name = "" + model.data(model.index(index.row, sensorColumns["name"]), role)
-        menuId = "" + model.data(model.index(index.row, sensorColumns["menuId"]), role)
-        cpu = parseFloat(model.data(model.index(index.row, sensorColumns["cpu"]), role))
-        memory = parseFloat(model.data(model.index(index.row, sensorColumns["memory"]), role))
-        netInbound = parseFloat(model.data(model.index(index.row, sensorColumns["netInbound"]), role))
-        netOutbound = parseFloat(model.data(model.index(index.row, sensorColumns["netOutbound"]), role))
-        diskRead = parseFloat(model.data(model.index(index.row, sensorColumns["diskRead"]), role))
-        diskWrite = parseFloat(model.data(model.index(index.row, sensorColumns["diskWrite"]), role))
-        iconName = "" + model.data(model.index(index.row, sensorColumns["iconName"]), role)
+        const row = model.rowForApplication(applicationId)
+        if (row < 0) {
+            actionEligible = false
+            pids = []
+            actionPids = []
+            return
+        }
+        const index = model.index(row, 0)
+        actionEligible = model.data(index, Process.ApplicationProcessModel.ActionEligible) === true
+
+        const readValue = sensor => {
+            const column = sensorColumns[sensor]
+            return column >= 0 ? model.data(model.index(row, column), role) : undefined
+        }
+        name = "" + (readValue("name") ?? "")
+        menuId = "" + (readValue("menuId") ?? "")
+        cpu = parseFloat(readValue("cpu"))
+        memory = parseFloat(readValue("memory"))
+        netInbound = parseFloat(readValue("netInbound"))
+        netOutbound = parseFloat(readValue("netOutbound"))
+        diskRead = parseFloat(readValue("diskRead"))
+        diskWrite = parseFloat(readValue("diskWrite"))
+        iconName = "" + (readValue("iconName") ?? "")
 
         pids = model.data(model.index(index.row, 0), pidsRole)
+        actionPids = model.data(index, Process.ApplicationProcessModel.ActionPIDs) ?? []
         if (!pids) {
             pids = []
         }

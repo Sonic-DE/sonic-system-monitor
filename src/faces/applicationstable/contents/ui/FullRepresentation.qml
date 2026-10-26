@@ -27,7 +27,7 @@ Faces.SensorFace {
 
     readonly property bool quitEnabled: {
         for (let info of table.selectedApplications) {
-            if (info.menuId == "session.slice" || info.menuId == "background.slice" || info.menuId == "services") {
+            if (!info.actionEligible) {
                 return false
             }
         }
@@ -118,8 +118,23 @@ Faces.SensorFace {
                 }
             }
 
+            Kirigami.InlineMessage {
+                Layout.fillWidth: true
+                visible: text.length > 0
+                type: Kirigami.MessageType.Warning
+                text: processHelper.statusMessage.length > 0 ? processHelper.statusMessage : table.sourceModel.statusMessage
+            }
+
+            Kirigami.InlineMessage {
+                Layout.fillWidth: true
+                visible: table.sourceModel.available
+                type: Kirigami.MessageType.Information
+                text: i18nc("@info", "Application totals include helper processes, and terminal totals include their shells and jobs. Uncertain members are not directly targeted by application actions. Unclassified or shared processes remain in Background Services.")
+            }
+
             ApplicationsTableView {
                 id: table
+                objectName: "applicationsTable"
 
                 Layout.fillWidth: true
                 Layout.fillHeight: true
@@ -268,6 +283,7 @@ Faces.SensorFace {
         id: killDialog
 
         property int signalToSend
+        property string requestToken: ""
 
         title: signalToSend === Process.Signal.KillSignal
                ? i18ncp("@title:window", "Force Quit Application", "Force Quit %1 Applications", items.length)
@@ -284,7 +300,7 @@ Faces.SensorFace {
                               "Quit these %1 applications? Unsaved work may be lost.",
                               items.length)
 
-        items: table.selectedApplications
+        items: []
 
         delegate: Kirigami.Padding {
             horizontalPadding: Kirigami.Units.largeSpacing
@@ -296,35 +312,34 @@ Faces.SensorFace {
                 icon.height: Kirigami.Units.iconSizes.large
                 title: modelData.name
                 subtitle: i18ncp("@item:intable", "%1 Process", "%1 Processes", modelData.pids.length)
+                          + (modelData.actionPids.length !== modelData.pids.length
+                             ? " — " + i18ncp("@item:intable", "%1 Direct Action Target", "%1 Direct Action Targets", modelData.actionPids.length) : "")
             }
         }
 
         onAccepted: {
             root.config.askWhenKilling = !killDialog.doNotAskAgain
 
-            for (var i in table.selectedApplications) {
-                processHelper.sendSignal(table.selectedApplications[i].pids, killDialog.signalToSend);
-            }
+            processHelper.sendSignal(requestToken, signalToSend)
         }
+        onClosed: processHelper.cancel(requestToken)
     }
 
     Table.ReniceDialog {
         id: reniceDialog
+        property string requestToken: ""
 
         onAccepted: {
-            const niceValue = 20 - cpuPriority
-            for (var i in table.selectedApplications) {
-                processHelper.setPriority(table.selectedApplications[i].pids, niceValue)
-                processHelper.setCpuScheduler(table.selectedApplications[i].pids, cpuMode, niceValue)
-                processHelper.setIoScheduler(table.selectedApplications[i].pids, ioMode, ioPriority)
-            }
+            const niceValue = Math.max(-20, Math.min(19, 20 - cpuPriority))
+            processHelper.applyScheduling(requestToken, niceValue, cpuMode, cpuPriority, ioMode, ioPriority)
         }
+        onClosed: processHelper.cancel(requestToken)
     }
 
-    Process.ProcessController {
+    Process.ApplicationController {
         id: processHelper
 
-        window: root.Window.window
+        model: table.sourceModel
 
         readonly property var killSignals: [
             Process.Signal.TerminateSignal,
@@ -332,32 +347,45 @@ Faces.SensorFace {
         ]
 
         function sendSignalToSelection(sig) {
-            if (table.selectedApplications.length == 0) {
+            if (table.selectedApplications.length == 0 || !root.quitEnabled) {
+                return
+            }
+
+            const request = capture(table.selectedApplicationIds)
+            if (request.length === 0) {
                 return
             }
 
             if (root.config.askWhenKilling && killSignals.includes(sig)) {
                 killDialog.signalToSend = sig
+                killDialog.requestToken = request
+                // Freeze both the displayed selection and the C++ target set.
+                killDialog.items = table.selectedApplications.map(info => ({
+                    name: info.name, iconName: info.iconName, pids: info.pids.slice(), actionPids: info.actionPids.slice()
+                }))
                 killDialog.open()
                 return
             }
 
-            for (var i in table.selectedApplications) {
-                sendSignal(table.selectedApplications[i].pids, sig);
-            }
+            sendSignal(request, sig)
         }
 
         function reniceSelection() {
-            if (table.selectedApplications.length == 0) {
+            if (table.selectedApplications.length == 0 || !root.quitEnabled) {
                 return
             }
 
-            let pids = table.selectedApplications.reduce((acc, val) => acc.concat(val.pids), [])
-
-            reniceDialog.cpuPriority = 20 - (processHelper.priority(pids) ?? 20)
-            reniceDialog.cpuMode = processHelper.cpuScheduler(pids) ?? 0
-            reniceDialog.ioPriority = processHelper.ioPriority(pids) ?? 0
-            reniceDialog.ioMode = processHelper.ioScheduler(pids) ?? 0
+            const request = capture(table.selectedApplicationIds)
+            if (request.length === 0) {
+                return
+            }
+            const settings = scheduling(request)
+            reniceDialog.requestToken = request
+            reniceDialog.cpuMode = settings.cpuMode ?? 0
+            const realtime = reniceDialog.cpuMode === Process.Scheduler.Fifo || reniceDialog.cpuMode === Process.Scheduler.RoundRobin
+            reniceDialog.cpuPriority = realtime ? (settings.realtimePriority ?? 1) : 20 - (settings.priority ?? 0)
+            reniceDialog.ioPriority = settings.ioPriority ?? 0
+            reniceDialog.ioMode = settings.ioMode ?? 0
 
             reniceDialog.open()
         }

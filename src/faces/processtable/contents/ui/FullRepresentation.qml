@@ -129,7 +129,7 @@ Faces.SensorFace {
         }
     ]
 
-    ActionGroup { id: showGroup; onTriggered: root.config.userFilterMode = action.mode }
+    ActionGroup { id: showGroup; onTriggered: action => root.config.userFilterMode = action.mode }
 
     contentItem: Item {
         ToolBar {

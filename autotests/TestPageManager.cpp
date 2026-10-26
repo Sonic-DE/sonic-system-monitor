@@ -52,7 +52,7 @@ private Q_SLOTS:
         QStringList dataDirs = {
             systemDir,
             // To test that we handle non-existent paths correctly.
-            u"/some/nonexistent/path/"_s,
+            systemDir + u"nonexistent-test-data/"_s,
         };
         qputenv("XDG_DATA_DIRS", dataDirs.join(':').toUtf8());
         QStandardPaths::setTestModeEnabled(true);
