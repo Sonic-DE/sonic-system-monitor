@@ -2,7 +2,7 @@
 
 SonicDE's System Monitor app, for keeping an eye on running apps, processes and how your computer's resources are being used.
 
-## Unreleased
+## 6.8.2 (2026-11-10)
 
 - The Applications view now works on systems that don't use systemd.
 - Now presents itself with SonicDE names and identity throughout the desktop.
